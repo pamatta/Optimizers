@@ -1,0 +1,106 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import matplotlib
+
+# Choose an interactive backend for matplotlib
+matplotlib.use('Qt5Agg')
+
+
+def f(x, y):
+    """The function to optimize, f(x, y) = x^2 + y^2."""
+    return x ** 2 + y ** 2
+
+
+def grad_f(point):
+    """Gradient of f(x, y) = x^2 + y^2, returns [2x, 2y]."""
+    x, y = point
+    return np.array([2 * x, 2 * y])
+
+
+# Optimizer update functions
+def sgd(point, learning_rate=0.1):
+    return point - learning_rate * grad_f(point)
+
+
+def sgd_momentum(point, velocity, learning_rate=0.1, momentum=0.9):
+    grad = grad_f(point)
+    velocity = momentum * velocity + learning_rate * grad
+    return point - velocity, velocity
+
+
+def adagrad(point, grad_accumulate, learning_rate=1.0):
+    grad = grad_f(point)
+    grad_accumulate += grad ** 2
+    adjusted_lr = learning_rate / (1e-8 + np.sqrt(grad_accumulate))
+    return point - adjusted_lr * grad, grad_accumulate
+
+
+def adam(point, m, v, t, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    grad = grad_f(point)
+    m = beta1 * m + (1 - beta1) * grad
+    v = beta2 * v + (1 - beta2) * (grad ** 2)
+    m_hat = m / (1 - beta1 ** t)
+    v_hat = v / (1 - beta2 ** t)
+    adjustment = learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+    return point - adjustment, m, v
+
+
+# Initial Parameters
+start_point = np.array([8.0, 8.0])
+iterations = 50
+
+# Trajectories for plotting
+trajectory_sgd = [start_point]
+trajectory_sgd_momentum = [start_point]
+trajectory_adagrad = [start_point]
+trajectory_adam = [start_point]
+
+# Specific initializations for momentum and adaptive methods
+velocity = np.array([0.0, 0.0])
+grad_accumulate = np.array([0.0, 0.0])
+m, v = np.array([0.0, 0.0]), np.array([0.0, 0.0])
+
+# Perform the optimization
+for t in range(1, iterations + 1):
+    next_point_sgd = sgd(trajectory_sgd[-1])
+    trajectory_sgd.append(next_point_sgd)
+
+    next_point_sgd_momentum, velocity = sgd_momentum(trajectory_sgd_momentum[-1], velocity)
+    trajectory_sgd_momentum.append(next_point_sgd_momentum)
+
+    next_point_adagrad, grad_accumulate = adagrad(trajectory_adagrad[-1], grad_accumulate)
+    trajectory_adagrad.append(next_point_adagrad)
+
+    next_point_adam, m, v = adam(trajectory_adam[-1], m, v, t, learning_rate=0.1, beta1=0.9, beta2=0.999, epsilon=1e-8)
+    trajectory_adam.append(next_point_adam)
+
+# Plotting Setup
+fig = plt.figure(figsize=(20, 10))
+axes = [fig.add_subplot(2, 2, i + 1, projection='3d') for i in range(4)]
+titles = ['SGD', 'SGD with Momentum', 'AdaGrad', 'Adam']
+trajectories = [trajectory_sgd, trajectory_sgd_momentum, trajectory_adagrad, trajectory_adam]
+colors = ['red', 'blue', 'green', 'black']
+
+animations = []
+for ax, traj, title, color in zip(axes, trajectories, titles, colors):
+    X = np.linspace(-9, 9, 400)
+    Y = np.linspace(-9, 9, 400)
+    X, Y = np.meshgrid(X, Y)
+    Z = f(X, Y)
+    ax.plot_surface(X, Y, Z, rstride=20, cstride=20, alpha=0.5, cmap='viridis')
+    line, = ax.plot([], [], [], 'o-', markersize=8, lw=2, color=color)
+    ax.set_title(title)
+
+
+    def update(num, line, traj, ax):
+        line.set_data([p[0] for p in traj[:num]], [p[1] for p in traj[:num]])
+        line.set_3d_properties([f(p[0], p[1]) for p in traj[:num]])
+        ax.view_init(30, 0.3 * num)
+        return line,
+
+
+    ani = FuncAnimation(fig, update, frames=iterations + 1, fargs=(line, traj, ax), blit=False, repeat=False)
+    animations.append(ani)
+
+plt.show()
